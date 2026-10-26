@@ -1,37 +1,18 @@
-import { act, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Search,
   Users,
   Phone,
   Copy,
   Check,
-  GraduationCap,
   X,
-  Loader,
+  LoaderCircle,
+  RefreshCw,
 } from "lucide-react";
+
 import type { Student } from "./types";
 import { getStudents } from "./api";
-
-// const students: Student[] = [
-//   {
-//     id: 1,
-//     name: "Иванов Иван Иванович",
-//     group: "УГЦ 26-04",
-//     phone: "+998 90 123-45-67",
-//   },
-//   {
-//     id: 2,
-//     name: "Петрова Анна Сергеевна",
-//     group: "УГЦ 26-03",
-//     phone: "+998 91 234-56-78",
-//   },
-//   {
-//     id: 3,
-//     name: "Сидоров Алексей",
-//     group: "УГЦ 26-04",
-//     phone: "+998 93 345-67-89",
-//   },
-// ];
+import logo from "/favicon.svg";
 
 export default function App() {
   const [query, setQuery] = useState("");
@@ -54,24 +35,32 @@ export default function App() {
         }
       } catch {
         if (active) {
+          setError("Не удалось загрузить список студентов.");
+        }
+      } finally {
+        if (active) {
           setLoading(false);
         }
       }
     }
 
-    loadStudents();
+    void loadStudents();
 
-    const interval = setInterval(loadStudents, 60_000);
-    setLoading(false);
+    const interval = window.setInterval(() => {
+      void loadStudents();
+    }, 60_000);
 
     return () => {
       active = false;
-      clearInterval(interval);
+      window.clearInterval(interval);
     };
   }, []);
 
   const groups = useMemo(
-    () => [...new Set(students.map((student) => student.group))].sort(),
+    () =>
+      [...new Set(students.map((student) => student.group))]
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b, "ru")),
     [students],
   );
 
@@ -94,160 +83,330 @@ export default function App() {
     try {
       await navigator.clipboard.writeText(student.phone);
       setCopied(student.id);
-      window.setTimeout(() => setCopied(null), 1500);
+
+      window.setTimeout(() => {
+        setCopied((current) => (current === student.id ? null : current));
+      }, 1500);
     } catch {
-      alert("Не удалось скопировать. Проверь разрешение браузера.");
+      window.alert(
+        "Не удалось скопировать номер. Проверь разрешение браузера.",
+      );
     }
   }
 
+  function normalizePhoneNumber(phoneNumber: string): string {
+    const cleanNumber = phoneNumber.replace(/[^\d+]/g, "");
+
+    if (cleanNumber.startsWith("998") && cleanNumber.length === 12) {
+      return `+${cleanNumber}`;
+    }
+
+    if (!cleanNumber.startsWith("+998") && cleanNumber.length === 9) {
+      return `+998${cleanNumber}`;
+    }
+
+    return cleanNumber;
+  }
+
+  const hasFilters = query.trim() !== "" || group !== "Все группы";
+
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-900">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-3xl items-center gap-3 px-4 py-5">
-          <div className="rounded-xl bg-blue-600 p-2.5 text-white">
-            <GraduationCap size={25} />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold">Студенты</h1>
-            <p className="text-sm text-slate-500">
-              Справочник групп и контактов
-            </p>
-          </div>
+    <main className="min-h-screen bg-[#f7f7f9] text-[#202127] antialiased">
+      {/* Header */}
+      <header className="border-b border-[#e5e6eb] bg-white">
+        <div className="mx-auto flex h-[68px] max-w-5xl items-center px-4 sm:px-6">
+          <a
+            href="/"
+            className="flex items-center gap-3 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-[#8585f5]"
+            aria-label="Студенческий справочник — главная"
+          >
+            <img
+              src={logo}
+              alt=""
+              width={36}
+              height={36}
+              className="shrink-0 rounded-lg"
+            />
+
+            <div>
+              <p className="text-[15px] font-semibold tracking-[-0.3px]">
+                Студенты
+              </p>
+              <p className="mt-0.5 text-xs text-[#858898]">
+                Справочник групп и контактов
+              </p>
+            </div>
+          </a>
         </div>
       </header>
 
-      <section className="mx-auto max-w-3xl px-4 py-6">
-        <div className="mb-5">
-          <h2 className="text-2xl font-bold tracking-tight">Найти студента</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Поиск по ФИО, группе или номеру телефона
+      {/* Main content */}
+      <section className="mx-auto w-full max-w-5xl px-4 pb-12 pt-8 sm:px-6 sm:pt-12">
+        {/* Page heading */}
+        <div className="mb-7">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[1.5px] text-[#7775c9]">
+            STUDENT DIRECTORY
+          </p>
+
+          <h1 className="text-[26px] font-semibold leading-tight tracking-[-1px] sm:text-[32px]">
+            Поиск студентов
+          </h1>
+
+          <p className="mt-2 max-w-lg text-sm leading-6 text-[#626575]">
+            Найдите студента по имени, группе или номеру телефона.
           </p>
         </div>
 
-        <div className="relative mb-3">
-          <Search
-            className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
-            size={20}
-          />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Например, Иванов или УГЦ 26-04"
-            className="w-full rounded-2xl border border-slate-200 bg-white py-4 pl-12 pr-11 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
-          />
-          {query && (
-            <button
-              onClick={() => setQuery("")}
-              aria-label="Очистить поиск"
-              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-2 text-slate-400 hover:bg-slate-100"
+        {/* Search */}
+        <div className="mb-5 rounded-xl border border-[#e5e6eb] bg-white p-2 shadow-[0_1px_2px_rgba(20,20,40,0.03)] transition-colors focus-within:border-[#8585f5] focus-within:ring-4 focus-within:ring-[#eeeeff]">
+          <div className="flex min-h-11 items-center gap-3 px-2">
+            <Search
+              size={19}
+              strokeWidth={1.8}
+              className="shrink-0 text-[#858898]"
+              aria-hidden="true"
+            />
+
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Имя студента или группа..."
+              aria-label="Поиск по имени, группе или номеру телефона"
+              className="min-w-0 flex-1 bg-transparent py-2 text-base text-[#202127] outline-none placeholder:text-[#a0a2af] sm:text-sm"
+            />
+
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                aria-label="Очистить поиск"
+                className="flex size-9 shrink-0 items-center justify-center rounded-lg text-[#858898] transition-colors hover:bg-[#f2f3f6] hover:text-[#202127] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8585f5]"
+              >
+                <X size={17} />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Group filters */}
+        <div className="mb-7">
+          {/* Родительский контейнер, который создает эффект затухания по бокам */}
+          <div
+            className="relative w-full"
+            style={{
+              maskImage:
+                "linear-gradient(to right, transparent, #000 20px, #000 calc(100% - 20px), transparent)",
+              WebkitMaskImage:
+                "linear-gradient(to right, transparent, #000 20px, #000 calc(100% - 20px), transparent)",
+            }}
+          >
+            <div
+              className="flex gap-2 overflow-x-auto pb-2"
+              aria-label="Фильтр по группам"
             >
-              <X size={18} />
-            </button>
+              {["Все группы", ...groups].map((item) => {
+                const selected = group === item;
+
+                return (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => setGroup(item)}
+                    aria-pressed={selected}
+                    className={`flex min-h-10 shrink-0 items-center rounded-lg border px-3.5 text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8585f5] focus-visible:ring-offset-2 ${
+                      selected
+                        ? "border-[#dadafa] bg-[#eeeeff] text-[#4949b5]"
+                        : "border-[#e5e6eb] bg-white text-[#626575] hover:border-[#d2d4dd] hover:bg-[#f6f6fa] hover:text-[#202127]"
+                    }`}
+                  >
+                    {item}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Results heading */}
+        <div className="mb-3 flex min-h-9 items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold text-[#202127]">Результаты</h2>
+
+          {!loading && !error && (
+            <span className="flex items-center gap-2 text-xs text-[#858898]">
+              <Users size={15} aria-hidden="true" />
+              {filteredStudents.length}{" "}
+              {filteredStudents.length === 1
+                ? "студент"
+                : filteredStudents.length >= 2 && filteredStudents.length <= 4
+                  ? "студента"
+                  : "студентов"}
+            </span>
           )}
         </div>
-
-        <div className="mb-5 flex flex-wrap gap-2">
-          <button
-            onClick={() => setGroup("Все группы")}
-            className={`rounded-full px-4 py-2 text-sm font-medium ${
-              group === "Все группы"
-                ? "bg-blue-600 text-white"
-                : "border border-slate-200 bg-white text-slate-600"
-            }`}
-          >
-            Все группы
-          </button>
-
-          {groups.map((item) => (
-            <button
-              key={item}
-              onClick={() => setGroup(item)}
-              className={`rounded-full px-4 py-2 text-sm font-medium ${
-                group === item
-                  ? "bg-blue-600 text-white"
-                  : "border border-slate-200 bg-white text-slate-600"
-              }`}
+        {/* Results container */}
+        <div className="overflow-hidden rounded-xl border border-[#e5e6eb] bg-white">
+          {/* Loading */}
+          {loading && (
+            <div
+              className="flex min-h-52 flex-col items-center justify-center px-5 py-12"
+              role="status"
             >
-              {item}
-            </button>
-          ))}
-        </div>
+              <LoaderCircle
+                size={24}
+                className="mb-3 animate-spin text-[#7775c9]"
+              />
+              <p className="text-sm font-medium text-[#626575]">
+                Загружаем студентов...
+              </p>
+              <p className="mt-1 text-xs text-[#858898]">
+                Это займёт несколько секунд
+              </p>
+            </div>
+          )}
 
-        <div className="mb-3 flex items-center justify-between">
-          <span className="text-sm text-slate-500">Результаты поиска</span>
-          <span className="flex items-center gap-1.5 text-sm text-slate-500">
-            <Users size={16} />
-            {filteredStudents.length}
-          </span>
-        </div>
-        <div className="space-y-3">
-          {error && <p>{error}</p>}
-          {filteredStudents.map((student) => (
-            <article
-              key={student.id}
-              className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
-            >
-              <h3 className="font-semibold leading-6">{student.name}</h3>
-
-              <span className="mt-2 inline-block rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
-                {student.group}
-              </span>
-
-              <div className="mt-4 flex items-center justify-between gap-3 border-t border-slate-100 pt-3">
-                <div className="flex min-w-0 items-center gap-2">
-                  <Phone size={17} className="shrink-0 text-slate-400" />
-                  <span className="truncate text-sm font-medium">
-                    {student.phone}
-                  </span>
-                </div>
-
-                <button
-                  onClick={() => copyPhone(student)}
-                  className={`flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium ${
-                    copied === student.id
-                      ? "bg-green-100 text-green-700"
-                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                  }`}
-                >
-                  {copied === student.id ? (
-                    <Check size={16} />
-                  ) : (
-                    <Copy size={16} />
-                  )}
-                  {copied === student.id ? "Скопировано" : "Копировать"}
-                </button>
+          {/* Error */}
+          {!loading && error && (
+            <div className="flex min-h-52 flex-col items-center justify-center px-5 py-10 text-center">
+              <div className="mb-3 flex size-11 items-center justify-center rounded-full bg-[#fff0f0] text-[#c03636]">
+                <RefreshCw size={19} />
               </div>
-            </article>
-          ))}
 
-          {filteredStudents.length === 0 && (
-            <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-12 text-center">
-              {loading ? (
-                <div className="flex flex-col items-center gap-2">
-                  <Loader
-                    size={28}
-                    className="spin mx-auto mb-3 text-slate-400"
-                  />
-                  <p className="font-medium text-slate-500">
-                    Ищем студентов...
-                  </p>
-                </div>
-              ) : (
-                <>
-                  <Search size={28} className="mx-auto mb-3 text-slate-400" />
-                  <p className="font-medium">Студенты не найдены</p>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Проверь ФИО, номер или выбранную группу
-                  </p>
-                </>
+              <p className="text-sm font-semibold text-[#202127]">
+                Не удалось загрузить данные
+              </p>
+
+              <p className="mt-1 max-w-sm text-sm leading-6 text-[#626575]">
+                Проверьте подключение к интернету и попробуйте обновить
+                страницу.
+              </p>
+
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="mt-5 inline-flex min-h-10 items-center gap-2 rounded-lg bg-[#5b5bd6] px-4 text-sm font-medium text-white transition-colors hover:bg-[#4b4bc4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8585f5] focus-visible:ring-offset-2"
+              >
+                <RefreshCw size={15} />
+                Повторить
+              </button>
+            </div>
+          )}
+
+          {/* Empty / no results */}
+          {!loading && !error && filteredStudents.length === 0 && (
+            <div className="flex min-h-56 flex-col items-center justify-center px-5 py-12 text-center">
+              <div className="mb-4 flex size-12 items-center justify-center rounded-xl border border-[#e5e6eb] bg-[#f7f7f9] text-[#858898]">
+                <Search size={21} strokeWidth={1.7} />
+              </div>
+
+              <h3 className="text-sm font-semibold text-[#202127]">
+                {students.length === 0
+                  ? "Список студентов пуст"
+                  : "Ничего не найдено"}
+              </h3>
+
+              <p className="mt-1 max-w-sm text-sm leading-6 text-[#626575]">
+                {students.length === 0
+                  ? "Данные пока недоступны. Попробуйте обновить список позже."
+                  : "Проверьте написание имени или попробуйте поиск по другой группе."}
+              </p>
+
+              {hasFilters && students.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuery("");
+                    setGroup("Все группы");
+                  }}
+                  className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-lg border border-[#e5e6eb] px-3.5 text-sm font-medium text-[#626575] transition-colors hover:bg-[#f6f6fa] hover:text-[#202127] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8585f5]"
+                >
+                  <X size={15} />
+                  Сбросить фильтры
+                </button>
               )}
             </div>
           )}
+
+          {/* Student rows */}
+          {!loading &&
+            !error &&
+            filteredStudents.map((student, index) => {
+              const isCopied = copied === student.id;
+              const phone = student.phone ?? "";
+              const hasPhone = phone.trim().length > 0;
+              return (
+                <article
+                  key={student.id}
+                  className={`group px-4 py-4 transition-colors duration-150 hover:bg-[#fafafd] sm:px-5 ${
+                    index > 0 ? "border-t border-[#e5e6eb]" : ""
+                  }`}
+                >
+                  <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-5">
+                    {/* Student information */}
+                    <div className="min-w-0 flex-1">
+                      <h3 className="break-words text-[14px] font-semibold leading-6 tracking-[-0.15px] text-[#202127]">
+                        {student.name}
+                      </h3>
+
+                      <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                        <span className="inline-flex items-center rounded-md border border-[#e5e6eb] bg-[#f7f7f9] px-2 py-1 text-xs font-medium text-[#626575]">
+                          {student.group}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Contact information and actions */}
+                    <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 border-t border-[#f0f0f3] pt-3 sm:justify-end sm:border-0 sm:pt-0">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <Phone
+                          size={16}
+                          strokeWidth={1.8}
+                          className="shrink-0 text-[#858898]"
+                          aria-hidden="true"
+                        />
+
+                        {hasPhone ? (
+                          <a
+                            href={`tel:${normalizePhoneNumber(phone)}`}
+                            className="break-all text-sm font-medium text-[#40414b] underline-offset-4 transition-colors hover:text-[#4949b5] hover:underline"
+                          >
+                            {phone}
+                          </a>
+                        ) : (
+                          <span className="text-sm text-[#858898]">
+                            Номер не указан
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex shrink-0 items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void copyPhone(student)}
+                          disabled={!hasPhone}
+                          aria-label={`Скопировать номер телефона: ${student.name}`}
+                          className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border px-3 text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8585f5] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40 ${
+                            isCopied
+                              ? "border-[#ccebd9] bg-[#eaf7ef] text-[#18794e]"
+                              : "border-[#e5e6eb] bg-white text-[#626575] hover:border-[#d2d4dd] hover:bg-[#f6f6fa] hover:text-[#202127]"
+                          }`}
+                        >
+                          {isCopied ? <Check size={15} /> : <Copy size={15} />}
+                          <span>{isCopied ? "Скопировано" : "Копировать"}</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
         </div>
 
-        <p className="mt-6 text-center text-xs text-slate-400">
-          Студенческий справочник
-        </p>
+        {/* Footer */}
+        <footer className="mt-6 flex flex-col items-center justify-between gap-2 text-xs text-[#858898] sm:flex-row">
+          <p>Студенческий справочник</p>
+          <p>Поиск и контакты студентов</p>
+        </footer>
       </section>
     </main>
   );
